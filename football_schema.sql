@@ -29,31 +29,93 @@ CREATE TABLE games (
 );
 
 
-CREATE TABLE team_stats (
-    team_id INT NOT NULL,
+CREATE TABLE game_advanced_stats (
+    game_id BIGINT NOT NULL,
     season INT NOT NULL,
     week INT NOT NULL,
-    -- Offensive Efficiency
-    games_played INT,
-    points_per_game FLOAT,
-    yards_per_play FLOAT,
-    explosiveness FLOAT,
-    success_rate FLOAT,
-    redzone_pct FLOAT,
-    -- Defensive Efficiency
-    points_allowed_per_game FLOAT,
-    yards_allowed_per_play FLOAT,
-    havoc_rate FLOAT,
-    third_down_defense_pct FLOAT,
-    redzone_defense_pct FLOAT,
-    -- Turnover / Situational Metrics
-    turnover_margin FLOAT,
-    fumble_rate FLOAT,
-    interception_rate FLOAT,
-    home_away_ppg_diff FLOAT,
-    recent_form_ppg FLOAT,
-    PRIMARY KEY (team_id, season, week),
-    FOREIGN KEY (team_id) REFERENCES teams(team_id)
+    team_id INT NOT NULL,
+    opponent_id INT NOT NULL,
+
+    -- Offense: passing plays
+    offense_passing_plays_explosiveness FLOAT,
+    offense_passing_plays_success_rate FLOAT,
+    offense_passing_plays_total_ppa FLOAT,
+    offense_passing_plays_ppa FLOAT,
+
+    -- Offense: rushing plays
+    offense_rushing_plays_explosiveness FLOAT,
+    offense_rushing_plays_success_rate FLOAT,
+    offense_rushing_plays_total_ppa FLOAT,
+    offense_rushing_plays_ppa FLOAT,
+
+    -- Offense: passing downs
+    offense_passing_downs_explosiveness FLOAT,
+    offense_passing_downs_success_rate FLOAT,
+    offense_passing_downs_ppa FLOAT,
+
+    -- Offense: standard downs
+    offense_standard_downs_explosiveness FLOAT,
+    offense_standard_downs_success_rate FLOAT,
+    offense_standard_downs_ppa FLOAT,
+
+    -- Offense: summary
+    offense_explosiveness FLOAT,
+    offense_success_rate FLOAT,
+    offense_total_ppa FLOAT,
+    offense_ppa FLOAT,
+    offense_drives INT,
+    offense_plays INT,
+    offense_open_field_yards_total FLOAT,
+    offense_open_field_yards FLOAT,
+    offense_second_level_yards_total FLOAT,
+    offense_second_level_yards FLOAT,
+    offense_line_yards_total FLOAT,
+    offense_line_yards FLOAT,
+    offense_stuff_rate FLOAT,
+    offense_power_success FLOAT,
+
+    -- Defense: passing plays
+    defense_passing_plays_explosiveness FLOAT,
+    defense_passing_plays_success_rate FLOAT,
+    defense_passing_plays_total_ppa FLOAT,
+    defense_passing_plays_ppa FLOAT,
+
+    -- Defense: rushing plays
+    defense_rushing_plays_explosiveness FLOAT,
+    defense_rushing_plays_success_rate FLOAT,
+    defense_rushing_plays_total_ppa FLOAT,
+    defense_rushing_plays_ppa FLOAT,
+
+    -- Defense: passing downs
+    defense_passing_downs_explosiveness FLOAT,
+    defense_passing_downs_success_rate FLOAT,
+    defense_passing_downs_ppa FLOAT,
+
+    -- Defense: standards downs
+    defense_standard_downs_explosiveness FLOAT,
+    defense_standard_downs_success_rate FLOAT,
+    defense_standard_downs_ppa FLOAT,
+
+    -- Defense: summary
+    defense_explosiveness FLOAT,
+    defense_success_rate FLOAT,
+    defense_total_ppa FLOAT,
+    defense_ppa FLOAT,
+    defense_drives INT,
+    defense_plays INT,
+    defense_open_field_yards_total FLOAT,
+    defense_open_field_yards FLOAT,
+    defense_second_level_yards_total FLOAT,
+    defense_second_level_yards FLOAT,
+    defense_line_yards_total FLOAT,
+    defense_line_yards FLOAT,
+    defense_stuff_rate FLOAT,
+    defense_power_success FLOAT,
+
+    PRIMARY KEY (game_id, team_id),
+    FOREIGN KEY (game_id) REFERENCES games(game_id),
+    FOREIGN KEY (team_id) REFERENCES teams(team_id),
+    FOREIGN KEY (opponent_id) REFERENCES teams(team_id)
 );
 
 
@@ -91,17 +153,6 @@ CREATE TABLE line_movement (
 );
 
 
-CREATE TABLE weather (
-    game_id BIGINT PRIMARY KEY,
-    temperature FLOAT,
-    wind_speed FLOAT,
-    precipitation FLOAT,
-    humidity FLOAT,
-    conditions VARCHAR(64),
-    FOREIGN KEY (game_id) REFERENCES games(game_id)
-);
-
-
 CREATE TABLE matchup_features (
     game_id BIGINT NOT NULL,
     season INT NOT NULL,
@@ -119,12 +170,7 @@ CREATE TABLE matchup_features (
     turnover_margin_diff FLOAT,
     -- Travel
     travel_distance FLOAT,
-    -- Weather (home team perspective)
-    temperature FLOAT,
-    wind_speed FLOAT,
-    precipitation FLOAT,
-    humidity FLOAT,
-    weather_conditions_score FLOAT, -- e.g., encoded or categorical numeric feature
+
     -- Vegas / line features
     vegas_spread_close FLOAT,
     vegas_over_under_close FLOAT,
@@ -153,7 +199,3 @@ CREATE TABLE weekly_predictions (
     FOREIGN KEY (game_id) REFERENCES games(game_id)
 );
 
-CREATE INDEX idx_team_stats_team_season_week ON team_stats(team_id, season, week);
-CREATE INDEX idx_elo_team_season_week ON elo_ratings(team_id, season, week);
-CREATE INDEX idx_line_movement_game_time ON line_movement(game_id, timestamp);
-CREATE INDEX idx_games_season_week ON games(season, week);
