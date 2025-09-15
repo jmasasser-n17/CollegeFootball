@@ -81,5 +81,3 @@ def test_calculate_elo():
 	teams_df = pd.DataFrame([{"team_id": 1}, {"team_id": 2}])
 	elo_df = utils.calculate_elo(games_df, teams_df)
 	assert set(["team_id", "season", "week", "elo"]).issubset(elo_df.columns)
-
-

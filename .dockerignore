@@ -1,0 +1,36 @@
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore virtual environments
+venv/
+.env/
+.env
+
+# Ignore git and version control
+.git/
+.gitignore
+
+# Ignore test files and directories
+tests/
+test_*.py
+*_test.py
+
+# Ignore Jupyter notebooks and data files
+*.ipynb
+data/
+*.csv
+*.json
+
+# Ignore OS and editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Ignore Docker artifacts
+docker-compose.yml
+Dockerfile
+
+# Ignore secrets and config files
+.env

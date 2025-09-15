@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: yourpassword
+      MYSQL_DATABASE: college_football
+      MYSQL_USER: airflow
+      MYSQL_PASSWORD: airflow
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  airflow-webserver:
+    image: apache/airflow:2.9.1-python3.11
+    depends_on:
+      - mysql
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: mysql+mysqlconnector://airflow:airflow@mysql:3306/college_football
+      AIRFLOW__CORE__FERNET_KEY: yourfernetkey
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+      # Add any other Airflow env vars you need
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./utils.py:/opt/airflow/utils.py
+      - ./requirements.txt:/requirements.txt
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.1-python3.11
+    depends_on:
+      - airflow-webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: mysql+mysqlconnector://airflow:airflow@mysql:3306/college_football
+      AIRFLOW__CORE__FERNET_KEY: yourfernetkey
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./utils.py:/opt/airflow/utils.py
+      - ./requirements.txt:/requirements.txt
+    command: scheduler
+
+
+volumes:
+  mysql_data:

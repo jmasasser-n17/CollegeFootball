@@ -12,7 +12,7 @@ import pandas as pd
 def test_historical_loader_main(
     mock_engine, mock_weather, mock_stats, mock_lines, mock_games, mock_teams
 ):
-    import historical_loader
+    import scripts.historical_loader as historical_loader
     # Setup mocks
     mock_teams.return_value = pd.DataFrame([
         {"team_id": 1, "team_name": "A", "lat": 0, "lon": 0}

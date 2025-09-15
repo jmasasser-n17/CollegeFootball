@@ -6,7 +6,6 @@ import requests
 import time
 import os
 import json
-from geopy.distance import geodesic
 from typing import Optional
 
 
@@ -316,12 +315,14 @@ def fetch_elo_api(api_key: str, seasons: list[int], teams_df: pd.DataFrame, game
             for g in elo_json:
                 week = g.get("week")
                 elo = g.get("elo")
-                records.append({
-                    "team_id": team_id,
-                    "season": season,
-                    "week": week,
-                    "elo": elo
-                })
+                print(f"Team: {team}, Season: {season}, Week: {week}, ELO: {elo}")
+                if week is not None:
+                    records.append({
+                        "team_id": team_id,
+                        "season": season,
+                        "week": week,
+                        "elo": elo
+                    })
             time.sleep(1)
     print(f"ELO records fetched {len(records)}")
     return pd.DataFrame(records)
