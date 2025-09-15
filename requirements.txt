@@ -3,5 +3,5 @@ requests
 sqlalchemy
 mysql-connector-python
 boto3
-beautifulsoup4
-lxml
+rapidfuzz
+selenium
