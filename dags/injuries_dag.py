@@ -2,7 +2,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from rapidfuzz import process, fuzz
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -12,14 +12,14 @@ import time
 import os
 
 def scrape_and_store_injuries():
+    # Selenium setup (requires chromium & chromedriver in image)
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    chrome_options.binary_location = "/usr/bin/chromium"  # Use Chromium inside Docker
+    chrome_options.binary_location = "/usr/bin/chromium"
 
-    service = Service("/usr/bin/chromedriver")  # Use chromedriver installed in Docker
-
+    service = Service("/usr/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get("https://www.covers.com/sport/football/ncaaf/injuries")
     time.sleep(5)
@@ -33,14 +33,11 @@ def scrape_and_store_injuries():
             for row in rows:
                 cols = row.find_elements(By.TAG_NAME, "td")
                 if len(cols) >= 3:
-                    player = cols[0].text.strip()
-                    position = cols[1].text.strip()
-                    status = cols[2].text.strip()
                     teams_data.append({
                         "team": team_name,
-                        "player": player,
-                        "position": position,
-                        "status": status
+                        "player": cols[0].text.strip(),
+                        "position": cols[1].text.strip(),
+                        "status": cols[2].text.strip()
                     })
         except Exception as e:
             print(f"Skipping a team due to error: {e}")
@@ -51,36 +48,39 @@ def scrape_and_store_injuries():
         print("No injury data found.")
         return
 
+    # Clean columns
     df['team'] = df['team'].str.replace('\n', ' ', regex=False).str.strip().str.title()
     df['player'] = df['player'].str.strip().str.title()
     df['status'] = df['status'].str.replace('\n', ' ', regex=False).str.strip()
-    df[['injury_status', 'game_date']] = df['status'].str.extract(r'^(.*?)\s*\(\s*(.*?)\s*\)$')
+    df['injury_status'] = df['status'].str.extract(r'^(.*?)\s*\(')[0]
     df = df.drop(columns=['status'])
-    current_year = datetime.now().year
-    df['game_date'] = pd.to_datetime(df['game_date'] + f' {current_year}', format='%a, %b %d %Y', errors='coerce')
+    df['last_updated'] = datetime.now()
 
-    # --- Fuzzy match team to team_id ---
-    mysql_user = os.environ.get("MYAPP_DB_USER", "root")
-    mysql_pass = os.environ.get("MYAPP_DB_PASSWORD", "")
-    mysql_host = os.environ.get("MYAPP_DB_DOCKER_HOST", "localhost")
-    mysql_db = os.environ.get("MYAPP_DB_DATABASE", "college_football")
-    engine = create_engine(f"mysql+mysqlconnector://{mysql_user}:{mysql_pass}@{mysql_host}/{mysql_db}")
-    teams = pd.read_sql('SELECT team_id, team_name FROM teams', engine)
+    # --- MySQL Connection via Airflow ---
+    from airflow.hooks.base import BaseHook
+    conn = BaseHook.get_connection("mysql_local")
+    engine = create_engine(conn.get_uri())
+
+    # Get team IDs for fuzzy matching
+    with engine.begin() as conn:
+        teams = pd.read_sql('SELECT team_id, team_name FROM teams', conn)
+
     def match_team_id(scraped_team, team_names, team_ids):
         result = process.extractOne(scraped_team, team_names, scorer=fuzz.token_sort_ratio)
         if result is None:
             return None
         match, score, idx = result
-        if score > 80:
-            return team_ids[idx]
-        else:
-            return None
+        return team_ids[idx] if score > 80 else None
+
     df['team_id'] = df['team'].apply(lambda x: match_team_id(x, teams['team_name'].tolist(), teams['team_id'].tolist()))
     df = df[df['team_id'].notnull()]
 
     # --- Write to MySQL ---
-    df.to_sql("injuries", engine, if_exists="replace", index=False)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM injuries"))
+        df.to_sql("injuries", conn, if_exists="append", index=False)
     print(f"Wrote {len(df)} injury records to MySQL.")
+
 
 default_args = {
     "owner": "airflow",

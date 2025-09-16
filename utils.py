@@ -449,6 +449,16 @@ def team_games_mask(games_df: pd.DataFrame, team_id: int, season: int, week: int
         (games_df['week'] < week)
     )
 
+def team_adv_stats_mask(games_adv_stats_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """'
+    Returns a boolean mask for games played by team_id in a given season up to (but not including) a given week.
+    """
+    return (
+        (games_adv_stats_df['team_id'] == team_id) &
+        (games_adv_stats_df['season'] == season) &
+        (games_adv_stats_df['week'] < week)
+    )
+
 
 def calculate_games_played(games_df: pd.DataFrame, team_id: int, season: int, week: int) -> int:
     """
@@ -460,6 +470,7 @@ def calculate_games_played(games_df: pd.DataFrame, team_id: int, season: int, we
 def calculate_points_per_game(games_df: pd.DataFrame, team_id: int, season: int, week: int):
     """
     Calculates total points scored / games played (up to a given week)
+    Returns None if no prior games.
     """
     mask = team_games_mask(games_df, team_id, season, week)
 
@@ -474,15 +485,196 @@ def calculate_points_per_game(games_df: pd.DataFrame, team_id: int, season: int,
 
     return (total_points / total_games)
 
-
-def calculate_yards_per_play(games_df: pd.DataFrame, team_id: int, season: int, week: int):
+def calculate_points_allowed_per_game(games_df: pd.DataFrame, team_id: int, season: int, week:int):
     """
-    Returns total yards 
+    Calculates total points allowed / games played (up to a given week)
+    Returns None if no prior games
     """
-    pass
+    mask = team_games_mask(games_df, team_id, season, week)
+
+    filtered_games = games_df[mask]
+    total_games = filtered_games.shape[0]
+    if total_games == 0:
+        return None
+    home_points_allowed = filtered_games.loc[filtered_games['home_team_id'] == team_id, 'away_points'].sum()
+    away_points_allowed = filtered_games.loc[filtered_games['away_team_id'] == team_id, 'home_points'].sum()
+    total_points_allowed = home_points_allowed + away_points_allowed
+
+    return (total_points_allowed / total_games)
+
+def calculate_margin_of_victory_per_game(games_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """
+    Calculates margin of victory or defeat up to a given week
+    Returns None if no prior games
+    """
+    mask = team_games_mask(games_df, team_id, season, week)
+    filtered_games = games_df[mask]
+    total_games = filtered_games.shape[0]
+
+    if total_games == 0:
+        return None
+    ppg = calculate_points_per_game(games_df, team_id, season, week)
+    papg = calculate_points_allowed_per_game(games_df, team_id, season, week)
+
+    return (ppg - papg)
+
+def calculate_win_rate(games_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """
+    Calculates win rate for all games played by a team before a given week in a season.
+    Return None if no prior games.
+    """
+
+    mask = team_games_mask(games_df, team_id, season, week)
+    past_games = games_df[mask].sort_values('week', ascending=False)
+    if past_games.shape[0] == 0:
+        return None
+    
+    home_wins = past_games.loc[(past_games['home_team_id'] == team_id) & (past_games['home_points'] > past_games['away_points'])].shape[0]
+    away_wins = past_games.loc[(past_games['away_team_id'] == team_id) & (past_games['away_points'] > past_games['home_points'])].shape[0]
+    total_wins = home_wins + away_wins
+    return (total_wins / past_games.shape[0])
+
+def calculate_recent_form(games_df: pd.DataFrame, team_id: int, season: int, week: int, N: int = 3):
+    """
+    Calculates win rate for the last N games played by a team before a given week in a season.
+    Returns None if no prior games.
+    """
+  
+    mask = team_games_mask(games_df, team_id, season, week)
+
+    past_games = games_df[mask].sort_values('week', ascending=False).head(N)
+    if past_games.shape[0] == 0:
+        return None
+
+    home_wins = past_games.loc[(past_games['home_team_id'] == team_id) & (past_games['home_points'] > past_games['away_points'])].shape[0]
+    away_wins = past_games.loc[(past_games['away_team_id'] == team_id) & (past_games['away_points'] > past_games['home_points'])].shape[0]
+    total_wins = home_wins + away_wins
+    return (total_wins / past_games.shape[0])
 
 
+def calculate_yards_per_play(games_adv_stats_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """
+    Returns avg yards per play for all games up to a given week in a season for a given team. 
+    Returns None if no prior games.
+    """
+    
+    mask = team_adv_stats_mask(games_adv_stats_df, team_id, season, week)
+    filtered_stats = games_adv_stats_df[mask]
+    if filtered_stats.shape[0] == 0:
+        return None
+    
+    total_offensive_yards = (
+        filtered_stats['offense_line_yards_total'].sum() +
+        filtered_stats['offense_second_level_yards_total'].sum() +
+        filtered_stats['offense_open_field_yards_total'].sum()
+    )
 
+    total_plays = filtered_stats['offense_plays'].sum()
+    if total_plays == 0:
+        return None
+
+    return (total_offensive_yards / total_plays)
+
+def calculate_yards_allowed_per_play(games_adv_stats_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """
+    Returns avg yards per play for all games up to a given week in a season for a given team. 
+    Returns None if no prior games.
+    """
+
+    mask = team_adv_stats_mask(games_adv_stats_df, team_id, season, week)
+    filtered_stats = games_adv_stats_df[mask]
+    if filtered_stats.shape[0] == 0:
+        return None
+    
+    total_defensive_yards = (
+        filtered_stats['defense_line_yards_total'].sum() +
+        filtered_stats['defense_second_level_yards_total'].sum() +
+        filtered_stats['defense_open_field_yards_total'].sum()
+    )
+
+    total_plays = filtered_stats['defense_plays'].sum()
+    if total_plays == 0:
+        return None
+    
+    return (total_defensive_yards / total_plays)
+
+def calculate_avg_explosiveness(games_adv_stats_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """
+    Returns avg explosiveness across all games up to a (but not including) a given week in a season
+    Returns None if no previous games have been played
+    """
+    mask = team_adv_stats_mask(games_adv_stats_df, team_id, season, week)
+    filtered_stats = games_adv_stats_df[mask]
+    if filtered_stats.shape[0] == 0:
+        return None
+    avg_explosiveness = filtered_stats['offense_explosiveness'].mean()
+    return avg_explosiveness
+
+def calculate_avg_success_rate(games_adv_stats_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """
+    Returns avg explosiveness across all games up to a (but not including) a given week in a season
+    Returns None if no previous games have been played
+    """   
+    mask = team_adv_stats_mask(games_adv_stats_df, team_id, season, week)
+    filtered_stats = games_adv_stats_df[mask]
+    if filtered_stats.shape[0] == 0:
+        return None
+    avg_success_rate = filtered_stats['offense_success_rate'].mean()
+    return avg_success_rate
+
+
+    
+
+
+# ----------------------------
+# Helper function to load ELO
+# ----------------------------
+
+def calculate_all_teams_elo(games_df: pd.DataFrame, team_ids: list, initial_elo: float = 1500, k: float = 20) -> pd.DataFrame:
+    """
+    Returns a DataFrame with columns: team_id, season, week, elo
+    """
+    records = []
+    for team_id in team_ids:
+        team_games = games_df[(games_df['home_team_id'] == team_id) | (games_df['away_team_id'] == team_id)]
+        team_games = team_games.sort_values(['season', 'week'])
+        current_elo = initial_elo
+        team_elos = {team_id: initial_elo}
+        for _, game in team_games.iterrows():
+            season = game['season']
+            week = game['week']
+            home_id = game['home_team_id']
+            away_id = game['away_team_id']
+            home_points = game['home_points']
+            away_points = game['away_points']
+            # Determine if this team is home or away
+            if team_id == home_id:
+                opponent_id = away_id
+                team_score = home_points
+                opp_score = away_points
+            else:
+                opponent_id = home_id
+                team_score = away_points
+                opp_score = home_points
+            opp_elo = team_elos.get(opponent_id, initial_elo)
+            expected = 1 / (1 + 10 ** ((opp_elo - current_elo) / 400))
+            actual = 1 if team_score > opp_score else 0.5 if team_score == opp_score else 0
+            new_elo = current_elo + k * (actual - expected)
+            team_elos[team_id] = new_elo
+            team_elos[opponent_id] = opp_elo + k * ((1 - actual) - (1 - expected))
+            records.append({
+                "team_id": team_id,
+                "season": season,
+                "week": week,
+                "elo": new_elo
+            })
+            current_elo = new_elo
+    elo_df = pd.DataFrame(records)
+    elo_df = elo_df.sort_values(['team_id', 'season', 'week', 'elo'])
+    elo_df = elo_df.drop_duplicates(subset=['team_id', 'season', 'week'], keep='last')
+
+
+    return elo_df
 
     
 

@@ -152,7 +152,6 @@ CREATE TABLE line_movement (
     FOREIGN KEY (game_id) REFERENCES games(game_id)
 );
 
-
 CREATE TABLE matchup_features (
     game_id BIGINT NOT NULL,
     season INT NOT NULL,
@@ -161,24 +160,19 @@ CREATE TABLE matchup_features (
     elo_diff FLOAT,
     points_per_game_diff FLOAT,
     points_allowed_per_game_diff FLOAT,
+    margin_of_victory_diff FLOAT,
+    win_rate_diff FLOAT,
     yards_per_play_diff FLOAT,
     yards_allowed_per_play_diff FLOAT,
     explosiveness_diff FLOAT,
     success_rate_diff FLOAT,
-    redzone_pct_diff FLOAT,
-    havoc_rate_diff FLOAT,
-    turnover_margin_diff FLOAT,
-    -- Travel
     travel_distance FLOAT,
-
+    rest_days_diff FLOAT,
+    neutral_site BOOLEAN,
     -- Vegas / line features
     vegas_spread_close FLOAT,
     vegas_over_under_close FLOAT,
-    spread_change FLOAT,           -- from line_movement table
-    spread_volatility FLOAT,
-    line_slope FLOAT,
-    sharp_move FLOAT,              -- weighted by sportsbook
-    -- Target variable
+    -- Target Variable
     home_win BOOLEAN,
     PRIMARY KEY (game_id, season, week),
     FOREIGN KEY (game_id) REFERENCES games(game_id)
@@ -198,4 +192,17 @@ CREATE TABLE weekly_predictions (
     PRIMARY KEY (game_id, season, week),
     FOREIGN KEY (game_id) REFERENCES games(game_id)
 );
+
+CREATE TABLE injuries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    team_id INT NOT NULL,
+    team VARCHAR(100),
+    player VARCHAR(100),
+    position VARCHAR(20),
+    injury_status VARCHAR(100),
+    game_date DATE,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (team_id) REFERENCES teams(team_id)
+);
+
 
