@@ -1,32 +1,19 @@
 services:
-  airflow-webserver:
-    image: apache/airflow:2.9.1-python3.11
-    env_file:
-      - .env
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: mysql+mysqlconnector://${MYAPP_DB_USER}:${MYAPP_DB_PASSWORD}@${MYAPP_DB_HOST}:${MYAPP_DB_PORT}/${MYAPP_DB_DATABASE}
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./utils.py:/opt/airflow/utils.py
-      - ./requirements.txt:/requirements.txt
+  airflow:
+    build: .
+    container_name: airflow
+    hostname: airflow
     ports:
       - "8080:8080"
-    command: webserver
-
-  airflow-scheduler:
-    image: apache/airflow:2.9.1-python3.11
-    env_file:
-      - .env
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: mysql+mysqlconnector://${MYAPP_DB_USER}:${MYAPP_DB_PASSWORD}@${MYAPP_DB_HOST}:${MYAPP_DB_PORT}/${MYAPP_DB_DATABASE}
-      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+    command: standalone
     volumes:
       - ./dags:/opt/airflow/dags
-      - ./utils.py:/opt/airflow/utils.py
       - ./requirements.txt:/requirements.txt
-    command: scheduler
+    environment:
+      - PYTHONPATH=/opt/airflow/dags
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=mysql+mysqlconnector://${MYAPP_DB_USER}:${MYAPP_DB_PASSWORD}@${MYAPP_DB_DOCKER_HOST}:${MYAPP_DB_PORT}/${MYAPP_DB_DATABASE}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    env_file:
+      - .env

@@ -1,2 +1,2 @@
-from cryptography.fernet import Fernet
-print(Fernet.generate_key().decode())
+import secrets
+print(secrets.token_urlsafe(32))

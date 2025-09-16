@@ -12,12 +12,13 @@ import time
 import os
 
 def scrape_and_store_injuries():
-    # --- Chrome options ---
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
-    service = Service("/opt/homebrew/bin/chromedriver")  # Adjust path as needed
+    chrome_options.binary_location = "/usr/bin/chromium"  # Use Chromium inside Docker
+
+    service = Service("/usr/bin/chromedriver")  # Use chromedriver installed in Docker
 
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get("https://www.covers.com/sport/football/ncaaf/injuries")
@@ -61,7 +62,7 @@ def scrape_and_store_injuries():
     # --- Fuzzy match team to team_id ---
     mysql_user = os.environ.get("MYAPP_DB_USER", "root")
     mysql_pass = os.environ.get("MYAPP_DB_PASSWORD", "")
-    mysql_host = os.environ.get("MYAPP_DB_HOST", "localhost")
+    mysql_host = os.environ.get("MYAPP_DB_DOCKER_HOST", "localhost")
     mysql_db = os.environ.get("MYAPP_DB_DATABASE", "college_football")
     engine = create_engine(f"mysql+mysqlconnector://{mysql_user}:{mysql_pass}@{mysql_host}/{mysql_db}")
     teams = pd.read_sql('SELECT team_id, team_name FROM teams', engine)
@@ -101,4 +102,3 @@ with DAG(
         python_callable=scrape_and_store_injuries,
     )
 
-    
