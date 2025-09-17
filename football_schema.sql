@@ -160,6 +160,8 @@ CREATE TABLE matchup_features (
     elo_diff FLOAT,
     points_per_game_diff FLOAT,
     points_allowed_per_game_diff FLOAT,
+    recent_points_per_game_diff FLOAT,
+    recent_points_allowed_per_game_diff FLOAT,
     margin_of_victory_diff FLOAT,
     win_rate_diff FLOAT,
     yards_per_play_diff FLOAT,
@@ -168,6 +170,7 @@ CREATE TABLE matchup_features (
     success_rate_diff FLOAT,
     travel_distance FLOAT,
     rest_days_diff FLOAT,
+    recent_form_diff FLOAT,
     neutral_site BOOLEAN,
     -- Vegas / line features
     vegas_spread_close FLOAT,
@@ -204,5 +207,6 @@ CREATE TABLE injuries (
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (team_id) REFERENCES teams(team_id)
 );
+
 
 

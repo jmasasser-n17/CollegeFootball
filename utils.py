@@ -1,4 +1,4 @@
-# utils.py
+ # utils.py
 
 from datetime import datetime
 import pandas as pd
@@ -7,6 +7,7 @@ import time
 import os
 import json
 from typing import Optional
+from geopy.distance import geodesic
 
 
 CFBD_BASE_URL = "https://api.collegefootballdata.com"
@@ -60,7 +61,7 @@ def fetch_teams_api(api_key: str) -> pd.DataFrame:
         conference = t.get("conference")
         stadium = t.get("location", {}).get("name", None)
         lat = t.get("location", {}).get("latitude", None)
-        lon = t.get("longitude", {}).get("longitude", None)
+        lon = t.get("location", {}).get("longitude", None)
 
         records.append({
             "team_id": team_id,
@@ -485,6 +486,42 @@ def calculate_points_per_game(games_df: pd.DataFrame, team_id: int, season: int,
 
     return (total_points / total_games)
 
+def calculate_recent_points_per_game(games_df: pd.DataFrame, team_id: int, season: int, week: int, N: int = 3):
+    """
+    Calculates a team's average Points over the last N games.
+    Returns None if no prior games
+    """
+    mask = team_games_mask(games_df, team_id, season, week)
+
+    past_games = games_df[mask].sort_values('week', ascending=False).head(N)
+    total_games = past_games.shape[0]
+    if total_games == 0:
+        return None
+    
+    home_points = past_games.loc[past_games['home_team_id'] == team_id, 'home_points'].sum()
+    away_points = past_games.loc[past_games['away_team_id'] == team_id, 'away_points'].sum()
+    total_points = home_points + away_points
+
+    return (total_points / total_games)
+
+def calculate_recent_points_allowed_per_game(games_df: pd.DataFrame, team_id: int, season: int, week: int, N: int = 3):
+    """
+    Calculates a team's average points allowed over the last N games.
+    Returns None if no prior games
+    """
+    mask = team_games_mask(games_df, team_id, season, week)
+    past_games = games_df[mask].sort_values('week', ascending=False).head(N)
+    total_games = past_games.shape[0]
+    if total_games == 0:
+        return None
+    
+    points_allowed_at_home = past_games.loc[past_games['home_team_id'] == team_id, 'away_points'].sum()
+    points_allowed_away = past_games.loc[past_games['away_team_id'] == team_id, 'home_points'].sum()
+    total_points = points_allowed_at_home + points_allowed_away
+
+    return (total_points / total_games)
+
+
 def calculate_points_allowed_per_game(games_df: pd.DataFrame, team_id: int, season: int, week:int):
     """
     Calculates total points allowed / games played (up to a given week)
@@ -622,8 +659,314 @@ def calculate_avg_success_rate(games_adv_stats_df: pd.DataFrame, team_id: int, s
     avg_success_rate = filtered_stats['offense_success_rate'].mean()
     return avg_success_rate
 
+def calculate_travel_distance(teams_df: pd.DataFrame, games_df: pd.DataFrame, game_id: int):
+    """
+    Returns distance between home and away stadiums for a given game.
+    """
+    filtered_game = games_df[games_df['game_id'] == game_id]
+    if filtered_game.empty:
+        return None
 
-    
+    home_id = filtered_game.iloc[0]['home_team_id']
+    away_id = filtered_game.iloc[0]['away_team_id']
+
+    home_team = teams_df[teams_df['team_id'] == home_id]
+    away_team = teams_df[teams_df['team_id'] == away_id]
+
+    if home_team.empty or away_team.empty:
+        return None
+
+    home_coords = (home_team.iloc[0]['lat'], home_team.iloc[0]['lon'])
+    away_coords = (away_team.iloc[0]['lat'], away_team.iloc[0]['lon'])
+
+    distance = geodesic(home_coords, away_coords).miles
+    return distance
+
+def calculate_rest_days(games_df: pd.DataFrame, team_id: int, season: int, week: int):
+    """
+    Returns the number of days since the team's previous game before the given week in a season.
+    Returns None if no prior games.
+    Handles both string and datetime.date types in the 'date' column.
+    """
+    mask = team_games_mask(games_df, team_id, season, week)
+    past_games = games_df[mask].sort_values('week', ascending=False)
+    if past_games.shape[0] == 0:
+        return None
+
+    # Get the most recent previous game
+    last_game_date_val = past_games.iloc[0]['date']
+    if not last_game_date_val:
+        return None
+
+    # Get current game date
+    current_game = games_df[
+        ((games_df['home_team_id'] == team_id) | (games_df['away_team_id'] == team_id)) &
+        (games_df['season'] == season) &
+        (games_df['week'] == week)
+    ]
+    if current_game.empty or not current_game.iloc[0]['date']:
+        return None
+
+    current_game_date_val = current_game.iloc[0]['date']
+
+    # Convert to datetime objects if needed
+    if isinstance(last_game_date_val, str):
+        last_game_date = datetime.strptime(last_game_date_val, "%Y-%m-%d")
+    else:
+        last_game_date = last_game_date_val
+
+    if isinstance(current_game_date_val, str):
+        current_game_date = datetime.strptime(current_game_date_val, "%Y-%m-%d")
+    else:
+        current_game_date = current_game_date_val
+
+    rest_days = (current_game_date - last_game_date)
+    return rest_days
+
+def calculate_home_win(games_df: pd.DataFrame, game_id: int):
+    """
+    Returns a boolean indicating whether or not the home team won a given game.
+    """
+    game = games_df[games_df['game_id'] == game_id]
+    if game.empty:
+        return None
+    return (game.iloc[0]['home_points'] > game.iloc[0]['away_points'])
+
+def check_neutral_site(games_df: pd.DataFrame, game_id: int):
+    """
+    Returns a boolean indicating whether or not a game was played at a neutral site.
+    """
+    game = games_df[games_df['game_id'] == game_id]
+    if game.empty:
+        return None
+    return (game.iloc[0]['neutral_site'])
+
+def find_vegas_spread_close(lines_df: pd.DataFrame, game_id: int):
+    """
+    Returns the closing vegas spread from a given game
+    """
+    game = lines_df[lines_df['game_id'] == game_id]
+    if game.empty:
+        return None
+    return (game.iloc[0]['spread_close'])
+
+def find_vegas_over_under_close(lines_df: pd.DataFrame, game_id: int):
+    """
+    Returns the closing vegas over under from a given game
+    """
+    game = lines_df[lines_df['game_id'] == game_id]
+    if game.empty:
+        return None
+    return (game.iloc[0]['over_under_close'])
+
+def calculate_elo_diff(elo_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """
+    Calculates the ELO difference between two teams in a given week and season.
+    Returns None if either team is missing.
+    """
+    home = elo_df[(elo_df['season'] == season) & (elo_df['week'] == week) & (elo_df['team_id'] == home_team_id)]
+    away = elo_df[(elo_df['season'] == season) & (elo_df['week'] == week) & (elo_df['team_id'] == away_team_id)]
+    if home.empty or away.empty:
+        return None
+    home_elo = home.iloc[0]['elo']
+    away_elo = away.iloc[0]['elo']
+    return (home_elo - away_elo)
+
+def calculate_points_per_game_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """
+    Calculates the PPG difference between two teams in a given week and season.
+    Returns None if either team is missing.
+    """
+    home_points_per_game = calculate_points_per_game(games_df, home_team_id, season, week)
+    away_points_per_game = calculate_points_per_game(games_df, away_team_id, season, week)
+    if (home_points_per_game is None) or (away_points_per_game is None):
+        return None
+    return (home_points_per_game - away_points_per_game)
+
+def calculate_points_allowed_per_game_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """
+    Calculates the Points Allowed Per Game difference between two teams in a given week and season.
+    Returns None if either team is missing.
+    """
+    home_points_allowed_per_game = calculate_points_allowed_per_game(games_df, home_team_id, season, week)
+    away_points_allowed_per_game = calculate_points_allowed_per_game(games_df, away_team_id, season, week)
+    if (home_points_allowed_per_game is None) or (away_points_allowed_per_game is None):
+        return None
+    return (home_points_allowed_per_game - away_points_allowed_per_game)
+
+def calculate_recent_points_per_game_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int, N: int = 3):
+    """"
+    Calculates the difference in points per game between two teams over the last N games in a given week and season.
+    Returns None if data from either team is missing.
+    """
+    recent_home_points_per_game = calculate_recent_points_per_game(games_df, home_team_id, season, week, N)
+    recent_away_points_per_game = calculate_recent_points_per_game(games_df, away_team_id, season, week, N)
+    if (recent_home_points_per_game is None) or (recent_away_points_per_game is None):
+        return None
+    return (recent_home_points_per_game - recent_away_points_per_game)
+
+def calculate_recent_points_allowed_per_game_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int, N: int = 3):
+    """"
+    Calculates the difference in points allowed per game between two teams over the last N games in a given week and season.
+    Returns None if data from either team is missing.
+    """
+    recent_home_points_allowed_per_game = calculate_recent_points_allowed_per_game(games_df, home_team_id, season, week, N)
+    recent_away_points_allowed_per_game = calculate_recent_points_allowed_per_game(games_df, away_team_id, season, week, N)
+    if (recent_home_points_allowed_per_game is None) or (recent_away_points_allowed_per_game is None):
+        return None
+    return (recent_home_points_allowed_per_game - recent_away_points_allowed_per_game)
+
+def calculate_margin_of_victory_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """
+    Calculates the difference between two team's margin of victory statistics up to a given week in a given season.
+    Return None if data from either team is missing.
+    """
+    home_margin_of_victory = calculate_margin_of_victory_per_game(games_df, home_team_id, season, week)
+    away_margin_of_victory = calculate_margin_of_victory_per_game(games_df, away_team_id, season, week)
+    if (home_margin_of_victory is None) or (away_margin_of_victory is None):
+        return None
+    return (home_margin_of_victory - away_margin_of_victory)
+
+def calculate_win_rate_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """"
+    Calculates the difference between two team's win rates up to a given week in a given season.
+    Returns None if data from either team is missing.
+    """
+    home_win_rate = calculate_win_rate(games_df, home_team_id, season, week)
+    away_win_rate = calculate_win_rate(games_df, away_team_id, season, week)
+    if (home_win_rate is None) or (away_win_rate is None):
+        return None
+    return (home_win_rate - away_win_rate)
+
+def calculate_yards_per_play_diff(games_adv_stats_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """"
+    Calculates the difference between two teams yards per play averages up to a given week in a given season.
+    Returns None if data from either team is missing.
+    """
+    home_yards_per_play = calculate_yards_per_play(games_adv_stats_df, home_team_id, season, week)
+    away_yards_per_plays = calculate_yards_per_play(games_adv_stats_df, away_team_id, season, week)
+    if (home_yards_per_play is None) or (away_yards_per_plays is None):
+        return None
+    return (home_yards_per_play - away_yards_per_plays)
+
+def calculate_yards_allowed_per_play_diff(games_adv_stats_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """'
+    Calculates the difference between two teams yards per play allowed averages up to a given week in a given season.
+    Returns None if data from either team is missing.
+    """
+    home_yards_allowed_per_play = calculate_yards_allowed_per_play(games_adv_stats_df, home_team_id, season, week)
+    away_yards_allowed_per_play = calculate_yards_allowed_per_play(games_adv_stats_df, away_team_id, season, week)
+    if (home_yards_allowed_per_play is None) or (away_yards_allowed_per_play is None):
+        return None
+    return (home_yards_allowed_per_play - away_yards_allowed_per_play)
+
+def calculate_explosiveness_diff(games_adv_stats_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """"
+    Calculates the difference between two teams average explosiveness statistic up to a given week in a given season.
+    Returns None if data from either team is missing.
+    """
+    home_explosiveness = calculate_avg_explosiveness(games_adv_stats_df, home_team_id, season, week)
+    away_explosiveness = calculate_avg_explosiveness(games_adv_stats_df, away_team_id, season, week)
+    if (home_explosiveness is None) or (away_explosiveness is None):
+        return None
+    return (home_explosiveness - away_explosiveness)
+
+def calculate_success_rate_diff(games_adv_stats_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """"
+    Calculates the difference between two teams averages success rate statistics up to a given week in a given season.
+    Returns None if data from either team is missing.
+    """
+    home_success_rate = calculate_avg_success_rate(games_adv_stats_df, home_team_id, season, week)
+    away_success_rate = calculate_avg_success_rate(games_adv_stats_df, away_team_id, season, week)
+    if (home_success_rate is None) or (away_success_rate is None):
+        return None
+    return (home_success_rate - away_success_rate)
+
+def calculate_rest_days_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int):
+    """
+    Calculates the difference between two teams rest days on the date they matchup
+    Returns None if data from either team is missing.
+    """
+    home_rest = calculate_rest_days(games_df, home_team_id, season, week)
+    away_rest = calculate_rest_days(games_df, away_team_id, season, week)
+    if (home_rest is None) or (away_rest is None):
+        return None
+    return (home_rest - away_rest)
+
+def calculate_recent_form_diff(games_df: pd.DataFrame, home_team_id: int, away_team_id: int, season: int, week: int, N: int = 3):
+    """"
+    Calculates the difference in recent form between two teams over the last N games.
+    Returns None if data from either team is missing.
+    """
+    home_recent_form = calculate_recent_form(games_df, home_team_id, season, week, N)
+    away_recent_form = calculate_recent_form(games_df, away_team_id, season, week, N)
+    if (home_recent_form is None) or (away_recent_form is None):
+        return None
+    return (home_recent_form - away_recent_form)
+
+def calculate_matchup_features(games_df: pd.DataFrame, games_adv_stats_df: pd.DataFrame, teams_df: pd.DataFrame, elo_df: pd.DataFrame, lines_df: pd.DataFrame):
+    """
+    Takes games_df, games_adv_stats_df, teams_df, elo_df, and lines_df and returns a DataFrame ready to load into the matchup_features table
+    """
+    records = []
+
+    for _, game in games_df.iterrows():
+        try:
+            game_id = game["game_id"]
+            season = game["season"]
+            week = game["week"]
+            home_team = game["home_team_id"]
+            away_team = game["away_team_id"]
+
+            elo_diff = calculate_elo_diff(elo_df, home_team, away_team, season, week)
+            points_per_game_diff = calculate_points_per_game_diff(games_df, home_team, away_team, season, week)
+            points_allowed_per_game_diff = calculate_points_allowed_per_game_diff(games_df, home_team, away_team, season, week)
+            recent_points_per_game_diff = calculate_recent_points_per_game_diff(games_df, home_team, away_team, season, week, 3)
+            recent_points_allowed_per_game_diff = calculate_recent_points_allowed_per_game_diff(games_df, home_team, away_team, season, week, 3)
+            margin_of_victory_diff = calculate_margin_of_victory_diff(games_df, home_team, away_team, season, week)
+            win_rate_diff = calculate_win_rate_diff(games_df, home_team, away_team, season, week)
+            yards_per_play_diff = calculate_yards_per_play_diff(games_adv_stats_df, home_team, away_team, season, week)
+            yards_allowed_per_play_diff = calculate_yards_allowed_per_play_diff(games_adv_stats_df, home_team, away_team, season, week)
+            explosiveness_diff = calculate_explosiveness_diff(games_adv_stats_df, home_team, away_team, season, week)
+            success_rate_diff = calculate_success_rate_diff(games_adv_stats_df, home_team, away_team, season, week)
+            travel_distance = calculate_travel_distance(teams_df, games_df, game_id)
+            rest_days_diff = calculate_rest_days_diff(games_df, home_team, away_team, season, week)
+            recent_form_diff = calculate_recent_form_diff(games_df, home_team, away_team, season, week)
+            neutral_site = check_neutral_site(games_df, game_id)
+            vegas_spread_close = find_vegas_spread_close(lines_df, game_id)
+            vegas_over_under_close = find_vegas_over_under_close(lines_df, game_id)
+            home_win = calculate_home_win(games_df, game_id)
+
+            records.append({
+                "game_id": game_id,
+                "season": season,
+                "week": week,
+                "elo_diff": elo_diff,
+                "points_per_game_diff": points_per_game_diff,
+                "points_allowed_per_game_diff": points_allowed_per_game_diff,
+                "recent_points_per_game_diff": recent_points_per_game_diff,
+                "recent_points_allowed_per_game_diff": recent_points_allowed_per_game_diff,
+                "margin_of_victory_diff": margin_of_victory_diff,
+                "win_rate_diff": win_rate_diff,
+                "yards_per_play_diff": yards_per_play_diff,
+                "yards_allowed_per_play_diff": yards_allowed_per_play_diff,
+                "explosiveness_diff": explosiveness_diff,
+                "success_rate_diff": success_rate_diff,
+                "travel_distance": travel_distance,
+                "rest_days_diff": rest_days_diff,
+                "recent_form_diff": recent_form_diff,
+                "neutral_site": neutral_site,
+                "vegas_spread_close": vegas_spread_close,
+                "vegas_over_under_close": vegas_over_under_close,
+                "home_win": home_win
+            })
+        except Exception as e:
+            print(f"Error processing game_id {game.get('game_id', 'N/A')}: {e}")
+            continue
+    return pd.DataFrame(records)
+
+
+
 
 
 # ----------------------------
