@@ -5,3 +5,8 @@ mysql-connector-python
 boto3
 rapidfuzz
 selenium
+pyarrow
+joblib
+geopy
+scikit-learn
+shap

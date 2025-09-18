@@ -78,3 +78,5 @@ poetry.lock
 .pytype/
 # Cython debug symbols
 cython_debug/
+
+*.parquet

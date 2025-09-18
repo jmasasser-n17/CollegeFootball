@@ -21,8 +21,10 @@ services:
     volumes:
       - ./dags:/opt/airflow/dags
       - ./requirements.txt:/requirements.txt
+      - ./utils.py:/opt/airflow/utils.py
+      - ./random_forest_model.pkl:/opt/airflow/random_forest_model.pkl
     environment:
-      - PYTHONPATH=/opt/airflow/dags
+      - PYTHONPATH=/opt/airflow/dags:/opt/airflow
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
       - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}

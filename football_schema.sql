@@ -138,19 +138,21 @@ CREATE TABLE vegas_lines (
     FOREIGN KEY (game_id) REFERENCES games(game_id)
 );
 
+DROP TABLE IF EXISTS line_movement;
 
 CREATE TABLE line_movement (
     game_id BIGINT NOT NULL,
     timestamp DATETIME NOT NULL,
     sportsbook VARCHAR(50) NOT NULL,
-    spread_home FLOAT,
-    spread_away FLOAT,
+    spread FLOAT,
     moneyline_home INT,
     moneyline_away INT,
     over_under FLOAT,
     PRIMARY KEY (game_id, timestamp, sportsbook),
     FOREIGN KEY (game_id) REFERENCES games(game_id)
 );
+
+
 
 CREATE TABLE matchup_features (
     game_id BIGINT NOT NULL,
@@ -181,19 +183,19 @@ CREATE TABLE matchup_features (
     FOREIGN KEY (game_id) REFERENCES games(game_id)
 );
 
-
 CREATE TABLE weekly_predictions (
     game_id BIGINT NOT NULL,
     season INT NOT NULL,
     week INT NOT NULL,
-    pred_prob_logreg FLOAT,
-    pred_prob_gbm FLOAT,
-    model_edge_logreg FLOAT,
-    model_edge_gbm FLOAT,
-    confidence_rank_logreg INT,
-    confidence_rank_gbm INT,
+    home_team_id INT NOT NULL,
+    away_team_id INT NOT NULL,
+    predicted_home_win TINYINT,
+    home_win_probability FLOAT,
+    timestamp DATETIME,
     PRIMARY KEY (game_id, season, week),
-    FOREIGN KEY (game_id) REFERENCES games(game_id)
+    FOREIGN KEY (game_id) REFERENCES games(game_id),
+    FOREIGN KEY (home_team_id) REFERENCES teams(team_id),
+    FOREIGN KEY (away_team_id) REFERENCES teams(team_id)
 );
 
 CREATE TABLE injuries (
@@ -208,5 +210,8 @@ CREATE TABLE injuries (
     FOREIGN KEY (team_id) REFERENCES teams(team_id)
 );
 
+
+UPDATE teams SET lat = 25.7536, lon = -80.3773 WHERE team_name = 'Florida International';
+UPDATE teams SET lat = 42.0656, lon = -87.6976 WHERE team_name = 'Northwestern';
 
 
