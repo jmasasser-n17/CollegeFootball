@@ -318,7 +318,7 @@ def update_all_charts(game_id):
             orientation='h'
         ))
         fig_shap.update_layout(
-            title="Blue: Home Strength -- Red: Away Strength",
+            title=f"Blue: Favors {home_team}  -- Red: Favors {away_team}",
             xaxis_title = "Feature",
             yaxis_title = "SHAP Value",
             height=350,
